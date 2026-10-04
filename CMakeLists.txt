@@ -26,16 +26,30 @@ else()
     set(SERTOS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../sertos")
 endif()
 
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/profiler")
-    set(PROFILER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/modules/profiler")
-else()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../profiler")
     set(PROFILER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../profiler")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/profiler")
+    set(PROFILER_DIR "${CMAKE_CURRENT_SOURCE_DIR}/modules/profiler")
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/stream")
+    set(STREAM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/modules/stream")
+else()
+    set(STREAM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../stream")
+endif()
+
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/modules/hashmap")
+    set(HASHMAP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/modules/hashmap")
+else()
+    set(HASHMAP_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../hashmap")
 endif()
 
 list(APPEND MODULE_INCLUDES 
     ${SERTOS_DIR}/inc 
     ${SERTOS_DIR}/port
     ${PROFILER_DIR}
+    ${STREAM_DIR}
+    ${HASHMAP_DIR}
 )
 
 set(SERTOS_SOURCES
@@ -140,7 +154,8 @@ add_executable(test_profiler
     tests/test_profiler_targets.c 
     tests/profiler_port_stub.c
     ${PROFILER_DIR}/profiler.c
-    modules/bitmap/bitmap.c
+    ${HASHMAP_DIR}/hashmap.c
+    ${STREAM_DIR}/stream.c
 )
 target_link_libraries(test_profiler PRIVATE unity)
 target_include_directories(test_profiler PRIVATE ${MODULE_INCLUDES})
@@ -170,6 +185,16 @@ set_source_files_properties(
     PROPERTIES COMPILE_OPTIONS "-finstrument-functions"
 )
 
+# 18. Stream Transport Layer
+add_executable(test_stream tests/test_stream.c ${STREAM_DIR}/stream.c)
+target_link_libraries(test_stream PRIVATE unity)
+target_include_directories(test_stream PRIVATE ${MODULE_INCLUDES})
+
+# 19. HashMap Module
+add_executable(test_hashmap tests/test_hashmap.c ${HASHMAP_DIR}/hashmap.c)
+target_link_libraries(test_hashmap PRIVATE unity)
+target_include_directories(test_hashmap PRIVATE ${MODULE_INCLUDES})
+
 set(ALL_TEST_TARGETS 
     test_ring_buffer 
     test_atomic 
@@ -178,6 +203,8 @@ set(ALL_TEST_TARGETS
     test_bitmap 
     test_crc 
     test_fsm
+    test_stream
+    test_hashmap
     test_sertos_task
     test_sertos_scheduler
     test_sertos_sem
@@ -266,6 +293,12 @@ if(ENABLE_LIZARD_GATE)
         if(EXISTS "${SERTOS_DIR}/port")
             list(APPEND COMPLEXITY_SCAN_DIRS "${SERTOS_DIR}/port")
         endif()
+        if(EXISTS "${STREAM_DIR}")
+            list(APPEND COMPLEXITY_SCAN_DIRS "${STREAM_DIR}")
+        endif()
+        if(EXISTS "${HASHMAP_DIR}")
+            list(APPEND COMPLEXITY_SCAN_DIRS "${HASHMAP_DIR}")
+        endif()
         if(NOT COMPLEXITY_SCAN_DIRS)
             set(COMPLEXITY_SCAN_DIRS "${CMAKE_CURRENT_SOURCE_DIR}")
         endif()
@@ -312,3 +345,5 @@ add_test(NAME Validation_SertOSBenchmark COMMAND test_sertos_benchmark)
 add_test(NAME Validation_Profiler COMMAND test_profiler)
 add_test(NAME Validation_SertOSSysTick COMMAND test_sertos_systick)
 add_test(NAME Validation_SertOSStats COMMAND test_sertos_stats)
+add_test(NAME Validation_Stream COMMAND test_stream)
+add_test(NAME Validation_HashMap COMMAND test_hashmap)
