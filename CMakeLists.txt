@@ -158,7 +158,77 @@ add_executable(test_profiler
     ${STREAM_DIR}/stream.c
 )
 target_link_libraries(test_profiler PRIVATE unity)
-target_include_directories(test_profiler PRIVATE ${MODULE_INCLUDES})
+target_include_directories(test_profiler PRIVATE ${MODULE_INCLUDES} "${PROFILER_DIR}/port")
+
+# 15. Profiler transport contract and memory backend
+add_executable(
+    test_profiler_transport
+    tests/test_profiler_transport.c
+    tests/profiler_port_stub.c
+    ${PROFILER_DIR}/profiler.c
+    ${PROFILER_DIR}/port/profiler_transport_memory.c
+    ${HASHMAP_DIR}/hashmap.c
+    ${STREAM_DIR}/stream.c
+)
+target_link_libraries(test_profiler_transport PRIVATE unity)
+target_include_directories(test_profiler_transport PRIVATE ${MODULE_INCLUDES} "${PROFILER_DIR}/port")
+
+# Fake-HAL coverage for the UART DMA backend and timeout/error paths
+add_executable(
+    test_profiler_transport_uart
+    tests/test_profiler_transport_uart.c
+    tests/fakes/profiler_uart/fake_hal.c
+    tests/profiler_port_stub.c
+    ${PROFILER_DIR}/port/profiler_transport_uart_dma.c
+    ${STREAM_DIR}/stream.c
+)
+target_compile_definitions(test_profiler_transport_uart PRIVATE STM32G070xx)
+target_include_directories(test_profiler_transport_uart PRIVATE
+    tests/fakes/profiler_uart
+    ${MODULE_INCLUDES}
+    "${PROFILER_DIR}/port"
+)
+target_link_libraries(test_profiler_transport_uart PRIVATE unity)
+
+# Host coverage for the interrupt-driven HAL UART backend used by Renode.
+add_executable(
+    test_profiler_transport_uart_it
+    tests/test_profiler_transport_uart_it.c
+    tests/fakes/profiler_uart/fake_hal.c
+    tests/profiler_port_stub.c
+    ${PROFILER_DIR}/port/profiler_transport_uart_it.c
+    ${STREAM_DIR}/stream.c
+)
+target_compile_definitions(test_profiler_transport_uart_it PRIVATE STM32G070xx)
+target_include_directories(test_profiler_transport_uart_it PRIVATE
+    tests/fakes/profiler_uart
+    ${MODULE_INCLUDES}
+    "${PROFILER_DIR}/port"
+)
+target_link_libraries(test_profiler_transport_uart_it PRIVATE unity)
+
+# Port backends coverage
+add_executable(
+    test_profiler_port_win
+    tests/test_profiler_port_win.c
+    ${PROFILER_DIR}/port/profiler_port_win.c
+)
+target_include_directories(test_profiler_port_win PRIVATE
+    ${MODULE_INCLUDES}
+    "${PROFILER_DIR}/port"
+)
+target_link_libraries(test_profiler_port_win PRIVATE unity)
+
+add_executable(
+    test_profiler_port_16bit_it
+    tests/test_profiler_port_16bit_it.c
+    ${PROFILER_DIR}/port/profiler_port_16bit_it.c
+)
+target_include_directories(test_profiler_port_16bit_it PRIVATE
+    ${MODULE_INCLUDES}
+    "${PROFILER_DIR}/port"
+)
+target_link_libraries(test_profiler_port_16bit_it PRIVATE unity)
 
 # Cortex-M SysTick clock-to-reload validation
 add_executable(test_sertos_systick tests/test_sertos_systick.c)
@@ -214,6 +284,9 @@ set(ALL_TEST_TARGETS
     test_sertos_timer
     test_sertos_benchmark
     test_profiler
+    test_profiler_transport
+    test_profiler_transport_uart
+    test_profiler_transport_uart_it
     test_sertos_systick
     test_sertos_stats
 )
@@ -299,6 +372,9 @@ if(ENABLE_LIZARD_GATE)
         if(EXISTS "${HASHMAP_DIR}")
             list(APPEND COMPLEXITY_SCAN_DIRS "${HASHMAP_DIR}")
         endif()
+        if(EXISTS "${PROFILER_DIR}/port")
+            list(APPEND COMPLEXITY_SCAN_DIRS "${PROFILER_DIR}/port")
+        endif()
         if(NOT COMPLEXITY_SCAN_DIRS)
             set(COMPLEXITY_SCAN_DIRS "${CMAKE_CURRENT_SOURCE_DIR}")
         endif()
@@ -343,6 +419,11 @@ add_test(NAME Validation_SertOSStreamBuffer COMMAND test_sertos_stream_buffer)
 add_test(NAME Validation_SertOSTimer COMMAND test_sertos_timer)
 add_test(NAME Validation_SertOSBenchmark COMMAND test_sertos_benchmark)
 add_test(NAME Validation_Profiler COMMAND test_profiler)
+add_test(NAME Validation_ProfilerPortWin COMMAND test_profiler_port_win)
+add_test(NAME Validation_ProfilerPort16BitIt COMMAND test_profiler_port_16bit_it)
+add_test(NAME Validation_ProfilerTransport COMMAND test_profiler_transport)
+add_test(NAME Validation_ProfilerTransportUart COMMAND test_profiler_transport_uart)
+add_test(NAME Validation_ProfilerTransportUartIt COMMAND test_profiler_transport_uart_it)
 add_test(NAME Validation_SertOSSysTick COMMAND test_sertos_systick)
 add_test(NAME Validation_SertOSStats COMMAND test_sertos_stats)
 add_test(NAME Validation_Stream COMMAND test_stream)
