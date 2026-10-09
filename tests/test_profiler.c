@@ -1,5 +1,7 @@
 #include "unity.h"
+#define PROFILER_SCOPES_ENABLED
 #include "profiler.h"
+#include "profiler_port.h"
 #include "profiler_port_stub.h"
 #include "stream.h"
 #include <stdint.h>
@@ -288,15 +290,15 @@ static void test_profiler_binary_dump(void)
 
     TEST_ASSERT_TRUE(profiler_dump(&stream));
 
-    /* Expected bytes: 24 (header) + 2 * 24 (records) + 4 (crc) = 76 bytes */
+    /* Expected bytes: 28 (header) + 2 * 24 (records) + 4 (crc) = 80 bytes */
     size_t expected_len = sizeof(ProfilerBinHeader) + (2U * sizeof(ProfilerMetric)) + sizeof(uint32_t);
-    TEST_ASSERT_EQUAL_UINT32(24U, sizeof(ProfilerBinHeader));
+    TEST_ASSERT_EQUAL_UINT32(28U, sizeof(ProfilerBinHeader));
     TEST_ASSERT_EQUAL_UINT32(expected_len, s_stream_buf_len);
 
     const ProfilerBinHeader* hdr = (const ProfilerBinHeader*)s_stream_buf;
     TEST_ASSERT_EQUAL_HEX32(PROFILER_BIN_MAGIC, hdr->magic);
     TEST_ASSERT_EQUAL_UINT16(PROFILER_BIN_VERSION, hdr->version);
-    TEST_ASSERT_EQUAL_UINT16(0x0003U, hdr->version);
+    TEST_ASSERT_EQUAL_UINT16(0x0004U, hdr->version);
     TEST_ASSERT_EQUAL_UINT16(2U, hdr->record_count);
     TEST_ASSERT_EQUAL_UINT32(1000000U, hdr->frequency);
     TEST_ASSERT_EQUAL_UINT16(0U, hdr->dropped_functions);
@@ -306,6 +308,8 @@ static void test_profiler_binary_dump(void)
     TEST_ASSERT_EQUAL_UINT16(0U, hdr->context_overflows);
     TEST_ASSERT_EQUAL_UINT8(PROFILER_TIME_WALL, hdr->time_mode);
     TEST_ASSERT_EQUAL_UINT8(0U, hdr->reserved);
+    TEST_ASSERT_EQUAL_UINT16(profiler_probe_overhead(), hdr->probe_overhead);
+    TEST_ASSERT_EQUAL_UINT16(profiler_nested_overhead(), hdr->nested_overhead);
 }
 
 static void test_profiler_instrumented_targets(void)
@@ -656,6 +660,142 @@ static void test_profiler_context_null_id_single_context(void)
     TEST_ASSERT_FALSE(s_contexts[1].in_use);
 }
 
+/* Scope body: each stub tick read advances the auto-tick timestamp by one */
+static void scope_body(uint32_t ticks)
+{
+    for (uint32_t i = 0U; i < ticks; ++i) {
+        (void)profiler_port_ticks();
+    }
+}
+
+static void scope_outer(void)
+{
+}
+
+static void scope_inner(void)
+{
+}
+
+/* Initializes per-context WALL mode with auto ticks (one tick per read) */
+static void init_scopes_auto_ticks(void)
+{
+    init_per_context(PROFILER_TIME_WALL, TEST_CONTEXTS);
+    profiler_stop();
+    profiler_port_stub_set_auto_ticks(true);
+    profiler_port_stub_set_context(CTX_A);
+    profiler_start();
+}
+
+/* T15: calibration measures the probe costs and records no metric */
+static void test_profiler_scope_calibration(void)
+{
+    init_scopes_auto_ticks();
+
+    /* Empty scope: one read between the enter and exit timestamps */
+    TEST_ASSERT_EQUAL_UINT32(1U, profiler_probe_overhead());
+    /* Nested pair: inner enter timestamp read and inner exit final read */
+    TEST_ASSERT_EQUAL_UINT32(2U, profiler_nested_overhead());
+    TEST_ASSERT_EQUAL_UINT32(0U, profiler_tracked_count());
+    TEST_ASSERT_EQUAL_UINT16(0U, profiler_stack_overflow_count());
+    TEST_ASSERT_EQUAL_UINT16(0U, profiler_unmatched_exit_count());
+}
+
+/* T16: a scope records only the time of the wrapped body */
+static void test_profiler_scope_net_duration(void)
+{
+    init_scopes_auto_ticks();
+
+    PROFILER_SCOPE(scope_outer, scope_body(7U));
+    PROFILER_SCOPE(scope_outer, scope_body(0U));
+
+    ProfilerMetric metric = get_metric(PROFILER_FN_ID(scope_outer));
+    TEST_ASSERT_EQUAL_UINT32(2U, metric.call_count);
+    TEST_ASSERT_EQUAL_UINT32(7U, metric.max_cycles);
+    TEST_ASSERT_EQUAL_UINT32(0U, metric.min_cycles);
+}
+
+/* T17: nested scope bookkeeping is excluded from the enclosing scope */
+static void test_profiler_scope_nested_compensation(void)
+{
+    init_scopes_auto_ticks();
+
+    profiler_scope_enter(PROFILER_FN_ID(scope_outer));
+    scope_body(3U);
+    PROFILER_SCOPE(scope_inner, scope_body(5U));
+    PROFILER_SCOPE(scope_inner, scope_body(4U));
+    scope_body(2U);
+    profiler_scope_exit(PROFILER_FN_ID(scope_outer));
+
+    TEST_ASSERT_EQUAL_UINT32(5U, get_metric(PROFILER_FN_ID(scope_inner)).max_cycles);
+    TEST_ASSERT_EQUAL_UINT32(14U, get_metric(PROFILER_FN_ID(scope_outer)).max_cycles);
+}
+
+/* T18: an instrumented caller excludes the bookkeeping of a nested scope */
+static void test_profiler_scope_inside_instrumented(void)
+{
+    init_scopes_auto_ticks();
+
+    __cyg_profile_func_enter(FN_F, NULL);
+    PROFILER_SCOPE(scope_inner, scope_body(6U));
+    __cyg_profile_func_exit(FN_F, NULL);
+
+    TEST_ASSERT_EQUAL_UINT32(6U, get_metric(PROFILER_FN_ID(scope_inner)).max_cycles);
+    /* Hook timestamps: enter read to exit read spans the body plus one read */
+    TEST_ASSERT_EQUAL_UINT32(7U, get_metric(FN_F).max_cycles);
+}
+
+/* T19: active mode excludes switched-out time from a scope */
+static void test_profiler_scope_active_switch(void)
+{
+    init_per_context(PROFILER_TIME_ACTIVE, TEST_CONTEXTS);
+
+    profiler_port_stub_set_context(CTX_A);
+    profiler_port_stub_set_ticks(100U);
+    profiler_scope_enter(PROFILER_FN_ID(scope_outer));
+    switch_at(CTX_A, CTX_B, 110U);
+    switch_at(CTX_B, CTX_A, 150U);
+    profiler_port_stub_set_context(CTX_A);
+    profiler_port_stub_set_ticks(160U);
+    profiler_scope_exit(PROFILER_FN_ID(scope_outer));
+
+    TEST_ASSERT_EQUAL_UINT32(0U, profiler_probe_overhead());
+    TEST_ASSERT_EQUAL_UINT32(20U, get_metric(PROFILER_FN_ID(scope_outer)).max_cycles);
+}
+
+/* T20: the switch hook's own bookkeeping is not charged to the resumed context */
+static void test_profiler_active_switch_in_after_hook(void)
+{
+    init_per_context(PROFILER_TIME_ACTIVE, TEST_CONTEXTS);
+    profiler_port_stub_set_auto_ticks(true);
+
+    /* Each tick read advances the clock by one */
+    profiler_port_stub_set_context(CTX_A);
+    profiler_port_stub_set_ticks(100U);
+    profiler_scope_enter(PROFILER_FN_ID(scope_outer));    /* frame at 102 */
+    profiler_context_switch(CTX_A, CTX_B);                /* A out at 103 */
+    profiler_port_stub_set_ticks(200U);
+    profiler_context_switch(CTX_B, CTX_A);                /* hook entry 201, A in at 202 */
+    profiler_port_stub_set_context(CTX_A);
+    profiler_port_stub_set_ticks(209U);
+    profiler_scope_exit(PROFILER_FN_ID(scope_outer));     /* exit at 210 */
+
+    /* (210 - 102) - (202 - 103) = 9; 10 if the hook entry timestamp were used */
+    TEST_ASSERT_EQUAL_UINT32(9U, get_metric(PROFILER_FN_ID(scope_outer)).max_cycles);
+}
+
+/* T21: scopes are ignored while the profiler is stopped */
+static void test_profiler_scope_disabled(void)
+{
+    init_scopes_auto_ticks();
+    profiler_stop();
+
+    PROFILER_SCOPE(scope_outer, scope_body(3U));
+    profiler_scope_enter(NULL);
+    profiler_scope_exit(NULL);
+
+    TEST_ASSERT_EQUAL_UINT32(0U, profiler_tracked_count());
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -683,5 +823,12 @@ int main(void)
     RUN_TEST(test_profiler_v3_dump_diagnostics);
     RUN_TEST(test_profiler_context_timer_wrap);
     RUN_TEST(test_profiler_context_null_id_single_context);
+    RUN_TEST(test_profiler_scope_calibration);
+    RUN_TEST(test_profiler_scope_net_duration);
+    RUN_TEST(test_profiler_scope_nested_compensation);
+    RUN_TEST(test_profiler_scope_inside_instrumented);
+    RUN_TEST(test_profiler_scope_active_switch);
+    RUN_TEST(test_profiler_active_switch_in_after_hook);
+    RUN_TEST(test_profiler_scope_disabled);
     return UNITY_END();
 }
