@@ -303,6 +303,7 @@ void test_scheduler_runtime_configuration(void)
     SertosConfig cfg;
     SertosStatus status;
 
+    (void)memset(&cfg, 0, sizeof(cfg));
     cfg.tick_rate_hz = 500U;
     cfg.enable_time_slicing = false;
     cfg.idle_task_stack = s_custom_idle_stack;
@@ -405,6 +406,75 @@ void test_scheduler_delay_until_validation_and_wraparound(void)
     TEST_ASSERT_EQUAL_UINT32(4U, wake);
 }
 
+static SertosTaskHandle s_switch_prev[4];
+static SertosTaskHandle s_switch_next[4];
+static uint32_t s_switch_hook_count;
+
+static __attribute__((no_instrument_function)) void custom_switch_hook(SertosTaskHandle prev,
+                                                                       SertosTaskHandle next)
+{
+    if (s_switch_hook_count < 4U) {
+        s_switch_prev[s_switch_hook_count] = prev;
+        s_switch_next[s_switch_hook_count] = next;
+    }
+    s_switch_hook_count++;
+}
+
+static void create_task(const char* name, uint8_t priority, uint8_t* stack,
+                        SertosTaskControlBlock* tcb, SertosTaskHandle* handle)
+{
+    SertosTaskConfig cfg;
+
+    cfg.name = name;
+    cfg.entry_func = task_entry_dummy;
+    cfg.param = NULL;
+    cfg.priority = priority;
+    cfg.stack_buffer = stack;
+    cfg.stack_size = STACK_SIZE;
+    TEST_ASSERT_EQUAL(SERTOS_STATUS_OK, sertos_task_create_static(&cfg, tcb, handle));
+}
+
+void test_scheduler_switch_hook(void)
+{
+    SertosConfig cfg;
+
+    (void)memset(&cfg, 0, sizeof(cfg));
+    cfg.tick_rate_hz = 1000U;
+    cfg.enable_time_slicing = true;
+    cfg.switch_hook = custom_switch_hook;
+    s_switch_hook_count = 0U;
+    TEST_ASSERT_EQUAL(SERTOS_STATUS_OK, sertos_scheduler_init_with_config(&cfg));
+    s_idle_tcb = sertos_scheduler_get_idle_tcb();
+
+    create_task("A", 2U, s_stack_a, &s_tcb_a, &s_handle_a);
+
+    /* First switch: prev is NULL */
+    TEST_ASSERT_EQUAL_PTR(&s_tcb_a, sertos_scheduler_perform_switch());
+    TEST_ASSERT_EQUAL_UINT32(1U, s_switch_hook_count);
+    TEST_ASSERT_NULL(s_switch_prev[0]);
+    TEST_ASSERT_EQUAL_PTR(s_handle_a, s_switch_next[0]);
+
+    /* Re-selecting the running task is not a switch */
+    TEST_ASSERT_EQUAL_PTR(&s_tcb_a, sertos_scheduler_perform_switch());
+    TEST_ASSERT_EQUAL_UINT32(1U, s_switch_hook_count);
+
+    /* Higher-priority task preempts: hook receives prev and next */
+    create_task("B", 3U, s_stack_b, &s_tcb_b, &s_handle_b);
+    TEST_ASSERT_EQUAL_PTR(&s_tcb_b, sertos_scheduler_perform_switch());
+    TEST_ASSERT_EQUAL_UINT32(2U, s_switch_hook_count);
+    TEST_ASSERT_EQUAL_PTR(s_handle_a, s_switch_prev[1]);
+    TEST_ASSERT_EQUAL_PTR(s_handle_b, s_switch_next[1]);
+
+    /* Default init clears the hook: switching stays safe and silent */
+    (void)sertos_scheduler_init();
+    s_idle_tcb = sertos_scheduler_get_idle_tcb();
+    s_handle_a = NULL;
+    s_handle_b = NULL;
+    create_task("C", 2U, s_stack_c, &s_tcb_c, &s_handle_c);
+    TEST_ASSERT_EQUAL_PTR(&s_tcb_c, sertos_scheduler_perform_switch());
+    TEST_ASSERT_EQUAL_UINT32(2U, s_switch_hook_count);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -417,5 +487,6 @@ int main(void)
     RUN_TEST(test_scheduler_runtime_configuration);
     RUN_TEST(test_scheduler_time_conversions);
     RUN_TEST(test_scheduler_delay_until_validation_and_wraparound);
+    RUN_TEST(test_scheduler_switch_hook);
     return UNITY_END();
 }
