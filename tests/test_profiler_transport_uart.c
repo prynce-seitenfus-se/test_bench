@@ -38,7 +38,7 @@ static void init_transport(void)
     s_config.tick_ms = test_tick_ms;
     s_config.yield = test_yield_ms;
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_OK,
-                      profiler_transport_init(&s_config));
+                      profiler_transport_init_custom(&s_config));
 }
 
 void setUp(void)

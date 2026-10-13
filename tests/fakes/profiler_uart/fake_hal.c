@@ -6,7 +6,7 @@
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef* uart);
 void HAL_UART_ErrorCallback(UART_HandleTypeDef* uart);
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef* uart);
+__attribute__((weak)) void HAL_UART_RxCpltCallback(UART_HandleTypeDef* uart) { (void)uart; }
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* uart, uint16_t size);
 
 static DMA_HandleTypeDef s_tx_dma;
@@ -206,3 +206,15 @@ HAL_UART_RxEventTypeTypeDef HAL_UARTEx_GetRxEventType(const UART_HandleTypeDef* 
     (void)uart;
     return s_rx_event;
 }
+
+uint32_t HAL_GetTick(void)
+{
+    static uint32_t s_fake_tick = 0U;
+    return ++s_fake_tick;
+}
+
+void HAL_Delay(uint32_t Delay)
+{
+    (void)Delay;
+}
+

@@ -179,7 +179,9 @@ add_executable(
     tests/test_profiler_transport_uart.c
     tests/fakes/profiler_uart/fake_hal.c
     tests/profiler_port_stub.c
+    ${PROFILER_DIR}/profiler.c
     ${PROFILER_DIR}/port/profiler_transport_uart_dma.c
+    ${HASHMAP_DIR}/hashmap.c
     ${STREAM_DIR}/stream.c
 )
 target_compile_definitions(test_profiler_transport_uart PRIVATE STM32G070xx)
@@ -196,7 +198,9 @@ add_executable(
     tests/test_profiler_transport_uart_it.c
     tests/fakes/profiler_uart/fake_hal.c
     tests/profiler_port_stub.c
+    ${PROFILER_DIR}/profiler.c
     ${PROFILER_DIR}/port/profiler_transport_uart_it.c
+    ${HASHMAP_DIR}/hashmap.c
     ${STREAM_DIR}/stream.c
 )
 target_compile_definitions(test_profiler_transport_uart_it PRIVATE STM32G070xx)

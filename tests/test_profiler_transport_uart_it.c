@@ -46,14 +46,19 @@ void tearDown(void)
 static void test_uart_it_init_validation(void)
 {
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_INVALID_PARAM,
-                      profiler_transport_init(NULL));
+                      profiler_transport_init_custom(NULL));
     s_config.device = NULL;
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_INVALID_PARAM,
-                      profiler_transport_init(&s_config));
+                      profiler_transport_init_custom(&s_config));
     s_config.device = &huart2;
     s_config.tx_timeout_ms = 0U;
-    TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_INVALID_PARAM,
-                      profiler_transport_init(&s_config));
+    /* tx_timeout_ms == 0 gets defaulted to DEFAULT_TIMEOUT_MS in custom */
+    TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_OK,
+                      profiler_transport_init_custom(&s_config));
+
+    /* One-line default init */
+    TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_OK,
+                      profiler_transport_init(&huart2));
 }
 
 static void test_uart_it_receive_frame(void)
@@ -63,7 +68,7 @@ static void test_uart_it_receive_frame(void)
     size_t length = 0U;
 
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_OK,
-                      profiler_transport_init(&s_config));
+                      profiler_transport_init_custom(&s_config));
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_OK, profiler_transport_listen());
     fake_hal_receive_interrupt(command, sizeof(command) - 1U);
 
@@ -84,7 +89,7 @@ static void test_uart_it_receive_overrun(void)
 
     s_config.rx_buffer_size = 4U;
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_OK,
-                      profiler_transport_init(&s_config));
+                      profiler_transport_init_custom(&s_config));
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_OK, profiler_transport_listen());
     fake_hal_receive_interrupt(bytes, sizeof(bytes) - 1U);
 
@@ -100,7 +105,7 @@ static void test_uart_it_transmit_chunks_and_latches_timeout(void)
     uint8_t captured[sizeof(data) - 1U];
 
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_OK,
-                      profiler_transport_init(&s_config));
+                      profiler_transport_init_custom(&s_config));
     TEST_ASSERT_EQUAL_UINT32(sizeof(data) - 1U,
                              stream_write(profiler_transport_stream(),
                                           data,
@@ -114,7 +119,7 @@ static void test_uart_it_transmit_chunks_and_latches_timeout(void)
     fake_hal_reset();
     fake_hal_set_tx_status(HAL_TIMEOUT);
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_OK,
-                      profiler_transport_init(&s_config));
+                      profiler_transport_init_custom(&s_config));
     TEST_ASSERT_EQUAL_UINT32(0U, stream_write(profiler_transport_stream(), data, TEST_TX_CAPACITY));
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_TIMEOUT, profiler_transport_status());
 }
@@ -122,10 +127,8 @@ static void test_uart_it_transmit_chunks_and_latches_timeout(void)
 static void test_uart_it_receive_start_failure(void)
 {
     fake_hal_set_rx_status(HAL_ERROR);
-    TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_OK,
-                      profiler_transport_init(&s_config));
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_IO_ERROR,
-                      profiler_transport_listen());
+                      profiler_transport_init_custom(&s_config));
     TEST_ASSERT_EQUAL_UINT8(PROFILER_TRANSPORT_EVENT_ERROR,
                             profiler_transport_poll(NULL));
     TEST_ASSERT_EQUAL(PROFILER_TRANSPORT_STATUS_IO_ERROR,
