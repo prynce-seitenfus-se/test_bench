@@ -4,14 +4,26 @@
 static uint16_t s_mock_timer_val = 0U;
 static bool     s_mock_init_called = false;
 static bool     s_mock_pending = false;
+static bool     s_wrap_before_low;
+static bool     s_wrap_after_low;
+static uint32_t s_low_reads;
 
 uint16_t profiler_port_hardware_timer16_read_low(void)
 {
+    s_low_reads++;
+    if (s_wrap_before_low) {
+        s_wrap_before_low = false;
+        profiler_port_16bit_it_overflow_isr();
+    }
     return s_mock_timer_val;
 }
 
 bool profiler_port_hardware_timer16_overflow_pending(void)
 {
+    if (s_wrap_after_low) {
+        s_wrap_after_low = false;
+        profiler_port_16bit_it_overflow_isr();
+    }
     return s_mock_pending;
 }
 
@@ -31,6 +43,9 @@ void setUp(void)
     s_mock_init_called = false;
     s_mock_timer_val = 0U;
     s_mock_pending = false;
+    s_wrap_before_low = false;
+    s_wrap_after_low = false;
+    s_low_reads = 0U;
 }
 
 void tearDown(void)
@@ -83,10 +98,30 @@ void test_profiler_port_16bit_it_pending_overflow_while_masked(void)
     TEST_ASSERT_EQUAL_HEX32(0x00010014U, profiler_port_ticks());
 }
 
+static void test_wrap_before_low_sample_does_not_resample(void)
+{
+    profiler_port_init();
+    s_wrap_before_low = true;
+    s_mock_timer_val = 5U;
+    TEST_ASSERT_EQUAL_HEX32(0x00010005U, profiler_port_ticks());
+    TEST_ASSERT_EQUAL_UINT32(1U, s_low_reads);
+}
+
+static void test_wrap_after_low_sample_keeps_original_high_word(void)
+{
+    profiler_port_init();
+    s_wrap_after_low = true;
+    s_mock_timer_val = 65530U;
+    TEST_ASSERT_EQUAL_HEX32(0x0000FFFAU, profiler_port_ticks());
+    TEST_ASSERT_EQUAL_UINT32(1U, s_low_reads);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_profiler_port_16bit_it_normal_and_overflow);
     RUN_TEST(test_profiler_port_16bit_it_pending_overflow_while_masked);
+    RUN_TEST(test_wrap_before_low_sample_does_not_resample);
+    RUN_TEST(test_wrap_after_low_sample_keeps_original_high_word);
     return UNITY_END();
 }

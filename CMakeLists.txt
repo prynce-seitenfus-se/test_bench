@@ -160,6 +160,26 @@ add_executable(test_profiler
 target_link_libraries(test_profiler PRIVATE unity)
 target_include_directories(test_profiler PRIVATE ${MODULE_INCLUDES} "${PROFILER_DIR}/port")
 
+add_library(profiler_archive_fixture STATIC
+    ${PROFILER_DIR}/profiler.c
+    tests/profiler_archive_transport_stub.c
+    tests/profiler_port_stub.c
+    ${HASHMAP_DIR}/hashmap.c
+    ${STREAM_DIR}/stream.c)
+target_compile_definitions(profiler_archive_fixture PRIVATE PROFILER_HAS_TRANSPORT=1)
+target_compile_options(profiler_archive_fixture PRIVATE -fno-instrument-functions)
+target_include_directories(profiler_archive_fixture PRIVATE ${MODULE_INCLUDES} "${PROFILER_DIR}/port")
+add_executable(test_profiler_archive tests/test_profiler_archive.c)
+target_include_directories(test_profiler_archive PRIVATE ${MODULE_INCLUDES})
+target_link_libraries(test_profiler_archive PRIVATE profiler_archive_fixture unity)
+
+add_executable(test_profiler_hardware_diagnostics
+    tests/test_profiler_hardware_diagnostics.c
+    tests/profiler_port_hardware_diagnostics.c)
+target_include_directories(test_profiler_hardware_diagnostics PRIVATE
+    ${MODULE_INCLUDES} "${PROFILER_DIR}/port")
+target_link_libraries(test_profiler_hardware_diagnostics PRIVATE unity)
+
 # 15. Profiler transport contract and memory backend
 add_executable(
     test_profiler_transport
@@ -233,6 +253,13 @@ target_include_directories(test_profiler_port_16bit_it PRIVATE
     "${PROFILER_DIR}/port"
 )
 target_link_libraries(test_profiler_port_16bit_it PRIVATE unity)
+
+add_executable(test_profiler_port_2x16bit
+    tests/test_profiler_port_2x16bit.c
+    ${PROFILER_DIR}/port/profiler_port_2x16bit.c)
+target_include_directories(test_profiler_port_2x16bit PRIVATE
+    ${MODULE_INCLUDES} "${PROFILER_DIR}/port")
+target_link_libraries(test_profiler_port_2x16bit PRIVATE unity)
 
 # Cortex-M SysTick clock-to-reload validation
 add_executable(test_sertos_systick tests/test_sertos_systick.c)
@@ -423,8 +450,24 @@ add_test(NAME Validation_SertOSStreamBuffer COMMAND test_sertos_stream_buffer)
 add_test(NAME Validation_SertOSTimer COMMAND test_sertos_timer)
 add_test(NAME Validation_SertOSBenchmark COMMAND test_sertos_benchmark)
 add_test(NAME Validation_Profiler COMMAND test_profiler)
+add_test(NAME Validation_ProfilerArchive COMMAND test_profiler_archive)
+add_test(NAME Validation_ProfilerHardwareDiagnostics COMMAND test_profiler_hardware_diagnostics)
+set(PROFILER_PYTHON_EXECUTABLE "" CACHE FILEPATH "Virtual-environment Python for profiler parser tests")
+if(PROFILER_PYTHON_EXECUTABLE)
+    add_test(NAME Validation_ProfilerParser
+        COMMAND "${PROFILER_PYTHON_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_profiler_parser.py")
+    add_test(NAME Validation_ProfilerWcetComparison
+        COMMAND "${PROFILER_PYTHON_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_profiler_wcet_comparison.py")
+endif()
+add_test(NAME Validation_ProfilerScopeRemoval
+    COMMAND ${CMAKE_COMMAND}
+        "-DCOMPILER=${CMAKE_C_COMPILER}"
+        "-DPROFILER_DIR=${PROFILER_DIR}"
+        "-DOUTPUT=${CMAKE_CURRENT_BINARY_DIR}/scope_removed.obj"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_profiler_scope_removal.cmake")
 add_test(NAME Validation_ProfilerPortWin COMMAND test_profiler_port_win)
 add_test(NAME Validation_ProfilerPort16BitIt COMMAND test_profiler_port_16bit_it)
+add_test(NAME Validation_ProfilerPort2x16Bit COMMAND test_profiler_port_2x16bit)
 add_test(NAME Validation_ProfilerTransport COMMAND test_profiler_transport)
 add_test(NAME Validation_ProfilerTransportUart COMMAND test_profiler_transport_uart)
 add_test(NAME Validation_ProfilerTransportUartIt COMMAND test_profiler_transport_uart_it)

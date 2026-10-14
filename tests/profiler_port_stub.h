@@ -25,4 +25,13 @@ void profiler_port_stub_set_ticks(uint32_t ticks);
  */
 void profiler_port_stub_set_context(const void* id);
 
+/** @brief Invokes a one-shot callback when the outer critical section exits. */
+void profiler_port_stub_on_unlock(void (*callback)(void));
+
+/** @brief Returns the longest outer critical-section duration in fake ticks. */
+uint32_t profiler_port_stub_max_critical_ticks(void);
+
+/** @brief Returns the number of outer critical-section exits. */
+uint32_t profiler_port_stub_unlock_count(void);
+
 #endif /* PROFILER_PORT_STUB_H */

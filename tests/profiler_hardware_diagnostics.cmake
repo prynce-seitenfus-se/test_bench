@@ -1,0 +1,40 @@
+option(PROFILER_HARDWARE_DIAGNOSTICS "Enable intrusive STM32 timing diagnostics (not production)" OFF)
+if(PROFILER_HARDWARE_DIAGNOSTICS)
+    if(NOT CMAKE_C_COMPILER_ID STREQUAL "GNU" OR
+       NOT PROFILER_PORT MATCHES "^(2x16bit|16bit_it)$")
+        message(FATAL_ERROR "Hardware diagnostics require GCC and an STM32 timer port.")
+    endif()
+    set(_profiler_diagnostic_source "${CMAKE_CURRENT_LIST_DIR}/profiler_port_hardware_diagnostics.c")
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE "${_profiler_diagnostic_source}")
+    set_source_files_properties("${_profiler_diagnostic_source}"
+        PROPERTIES COMPILE_OPTIONS "-fno-instrument-functions")
+    foreach(_symbol IN ITEMS profiler_port_init profiler_port_enter_critical
+        profiler_port_exit_critical SysTick_Handler TIM6_IRQHandler
+        TIM1_BRK_UP_TRG_COM_IRQHandler profiler_context_switch)
+        target_link_options(${CMAKE_PROJECT_NAME} PRIVATE "LINKER:--wrap=${_symbol}")
+    endforeach()
+    target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+        "LINKER:--undefined=profiler_hardware_diagnostics")
+    # Startup weak aliases are locally defined, so --wrap alone cannot redirect vectors.
+    get_target_property(_profiler_sources ${CMAKE_PROJECT_NAME} SOURCES)
+    set(_profiler_startup_found FALSE)
+    foreach(_source IN LISTS _profiler_sources)
+        get_filename_component(_name "${_source}" NAME)
+        if(_name STREQUAL "startup_stm32g070xx.s")
+            file(READ "${_source}" _startup)
+            foreach(_handler IN ITEMS SysTick_Handler TIM6_IRQHandler TIM1_BRK_UP_TRG_COM_IRQHandler)
+                string(REGEX REPLACE "(\\.word[ \t]+)${_handler}([ \t\r\n])"
+                    "\\1__wrap_${_handler}\\2" _startup "${_startup}")
+            endforeach()
+            set(_diagnostic_startup "${CMAKE_CURRENT_BINARY_DIR}/startup_profiler_diagnostics.s")
+            file(WRITE "${_diagnostic_startup}" "${_startup}")
+            list(REMOVE_ITEM _profiler_sources "${_source}")
+            list(APPEND _profiler_sources "${_diagnostic_startup}")
+            set(_profiler_startup_found TRUE)
+        endif()
+    endforeach()
+    if(NOT _profiler_startup_found)
+        message(FATAL_ERROR "Hardware diagnostics require the STM32G070 startup vector source.")
+    endif()
+    set_property(TARGET ${CMAKE_PROJECT_NAME} PROPERTY SOURCES "${_profiler_sources}")
+endif()

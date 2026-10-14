@@ -41,7 +41,7 @@ void tearDown(void)
 
 static bool initialize_profiler(void)
 {
-    return profiler_init(1000000U);
+    return profiler_init(1000000U, NULL);
 }
 
 static void test_transport_init_validation(void)
