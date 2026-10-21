@@ -99,7 +99,9 @@ if defined LIZARD_EXE (
         %* ^
         modules ^
         ..\sertos\src ^
-        ..\sertos\port
+        ..\sertos\port ^
+        ..\profiler\profiler.c ^
+        ..\profiler\profiler.h
 ) else (
     "%PYTHON_EXE%" -m lizard ^
         -C 10 ^
@@ -114,7 +116,9 @@ if defined LIZARD_EXE (
         %* ^
         modules ^
         ..\sertos\src ^
-        ..\sertos\port
+        ..\sertos\port ^
+        ..\profiler\profiler.c ^
+        ..\profiler\profiler.h
 )
 
 set "EXIT_CODE=%errorlevel%"

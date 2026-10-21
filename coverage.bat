@@ -81,6 +81,10 @@ build\test_sertos_stream_buffer.exe
 if errorlevel 1 ( popd & exit /b %errorlevel% )
 build\test_sertos_timer.exe
 if errorlevel 1 ( popd & exit /b %errorlevel% )
+if exist "build\test_profiler.exe" (
+    build\test_profiler.exe
+    if errorlevel 1 ( popd & exit /b %errorlevel% )
+)
 
 echo.
 echo ============================================================
@@ -96,6 +100,16 @@ gcov -b -o "..\build\CMakeFiles\test_bitmap.dir\modules\bitmap\bitmap.c.obj" "..
 gcov -b -o "..\build\CMakeFiles\test_atomic.dir\tests\test_atomic.c.obj" "..\modules\atomic\atomic.h"
 gcov -b -o "..\build\CMakeFiles\test_crc.dir\modules\crc\crc.c.obj" "..\modules\crc\crc.c"
 gcov -b -o "..\build\CMakeFiles\test_fsm.dir\modules\fsm\fsm.c.obj" "..\modules\fsm\fsm.c"
+
+:: Profiler & Hashmap coverage
+if exist "..\build\CMakeFiles\test_profiler.dir" (
+    for /r "..\build\CMakeFiles\test_profiler.dir" %%O in (profiler.c.obj) do if exist "%%~fO" (
+        gcov -b -o "%%~fO" "%SCRIPT_DIR%\..\profiler\profiler.c"
+    )
+    for /r "..\build\CMakeFiles\test_profiler.dir" %%O in (hashmap.c.obj) do if exist "%%~fO" (
+        gcov -b -o "%%~fO" "%SCRIPT_DIR%\..\hashmap\hashmap.c"
+    )
+)
 if exist "%SCRIPT_DIR%\modules\sertos\src\sertos_task.c" (
     set "SERTOS_SOURCE_DIR=%SCRIPT_DIR%\modules\sertos"
 ) else if exist "%SCRIPT_DIR%\..\sertos\src\sertos_task.c" (
