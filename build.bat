@@ -79,9 +79,20 @@ endlocal
 exit /b 0
 
 :show_help
-echo Usage: build.bat [-c^|--clean]
+echo ============================================================
+echo [BUILD] Centralized Embedded Test Bench Builder
+echo Generator: CMake + MinGW Makefiles (GCC 13.2.0)
+echo ============================================================
+echo.
+echo Usage: build.bat [options]
 echo.
 echo Options:
-echo   -c, --clean   Remove the CMake build directory before rebuilding.
+echo   -c, --clean       Remove previous CMake build directory before rebuilding
+echo   -h, --help, /?    Show this help message and exit
+echo.
+echo Typical workflows:
+echo   build.bat           Incremental configure, build, and automated complexity check
+echo   build.bat --clean   Clean rebuild from scratch
+echo.
 popd
 exit /b 0

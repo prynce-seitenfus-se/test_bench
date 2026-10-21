@@ -71,6 +71,10 @@ if not defined LIZARD_EXE (
 set "OUTPUT_ARGS="
 set "EXTRA_ARGS="
 
+if "%~1"=="-h" goto :show_help
+if "%~1"=="--help" goto :show_help
+if "%~1"=="/?" goto :show_help
+
 if "%1"=="--html" (
     echo [INFO] Generating HTML complexity report: complexity_report.html
     set "OUTPUT_ARGS=--html -o complexity_report.html"
@@ -136,3 +140,25 @@ if %EXIT_CODE% equ 0 (
 
 popd
 exit /b %EXIT_CODE%
+
+:show_help
+echo ============================================================
+echo [LIZARD] Code Complexity ^& Maintainability Quality Gate
+echo Thresholds: CCN ^<= 10 ^| NLOC ^<= 75 ^| Params ^<= 5
+echo ============================================================
+echo.
+echo Usage: lizard.bat [options]
+echo.
+echo Wrapper options:
+echo   --html                Generate HTML complexity report (complexity_report.html)
+echo   -w, --warnings_only   Show only functions exceeding complexity thresholds
+echo   -h, --help            Show this help message
+echo.
+echo Underlying Lizard tool options:
+if defined LIZARD_EXE (
+    "%LIZARD_EXE%" -h
+) else if defined PYTHON_EXE (
+    "%PYTHON_EXE%" -m lizard -h
+)
+popd
+exit /b 0

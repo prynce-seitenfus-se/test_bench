@@ -1,3 +1,7 @@
 # Lizard complexity and parameter whitelist
 # Permitted exceptions for architectural or legacy signatures:
 fsm_init
+sertos_port_yield
+profiler_transport_init_custom
+resolve_symbols
+main

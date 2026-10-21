@@ -3,6 +3,13 @@ set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 pushd "%SCRIPT_DIR%"
 
+:: -----------------------------------------------------------------------------
+:: Check for help request
+:: -----------------------------------------------------------------------------
+if "%~1"=="-h" goto :show_help
+if "%~1"=="--help" goto :show_help
+if "%~1"=="/?" goto :show_help
+
 :: Ensure CMake/CTest and MinGW are available in PATH
 where ctest.exe >nul 2>nul
 if errorlevel 1 (
@@ -152,3 +159,25 @@ echo [SUCCESS] All unit test suites passed successfully.
 echo ============================================================
 popd
 endlocal
+exit /b 0
+
+:show_help
+echo ============================================================
+echo [RUN] Centralized Embedded Test Suite Runner
+echo Harness: CTest + Unity Test Framework
+echo ============================================================
+echo.
+echo Usage: run.bat [filter^|options]
+echo.
+echo Options:
+echo   -h, --help, /?        Show this help message and exit
+echo   [filter]              Case-insensitive regex/name to run a single test suite
+echo.
+echo Examples:
+echo   run.bat                 Run all 29 unit test suites across all submodules
+echo   run.bat profiler        Run only profiler tests (test_profiler.exe)
+echo   run.bat scheduler       Run only scheduler tests
+echo   run.bat mutex           Run only mutex tests
+echo.
+popd
+exit /b 0
